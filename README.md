@@ -1,2 +1,5 @@
 # hello-world
-Just another repository
+
+Hi Guys!
+
+My name is Nanda, and i wanna learn about node. 
