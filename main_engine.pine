@@ -1,108 +1,195 @@
 //@version=6
-indicator("MAIN ENGINE – CORE CLEAN", overlay=true)
+indicator("MAIN ENGINE – NORMAL MODE PRO", overlay=true, max_labels_count=500)
 
 // =====================================================
-// EMA
+// INPUT
 // =====================================================
-emaFast = ta.ema(close, 5)
-emaMid = ta.ema(close, 20)
-emaSlow = ta.ema(close, 50)
+emaFastLen   = input.int(5,  "EMA Fast")
+emaMidLen    = input.int(20, "EMA Mid")
+emaSlowLen   = input.int(50, "EMA Slow")
 
-plot(emaFast, color=color.white, linewidth=1, title="EMA 5")
-plot(emaMid, color=color.orange,   linewidth=1, title="EMA 20")
-plot(emaSlow, color=color.blue,   linewidth=1, title="EMA 50")
+psarStart    = input.float(0.02, "PSAR Start")
+psarInc      = input.float(0.02, "PSAR Increment")
+psarMax      = input.float(0.2,  "PSAR Max")
+
+stFactor     = input.float(3.0, "SuperTrend Factor")
+stATR        = input.int(10, "SuperTrend ATR")
+
+sessionTime  = input.session("1900-2300", "Trading Session (WIB)")
+
+atrLen       = input.int(14, "ATR Length")
+atrMult      = input.float(1.5, "Max SL ATR Multiplier")
+
+pivotLen     = input.int(10, "Pivot Length")
+rrRatio      = input.float(2.0, "Risk Reward")
 
 // =====================================================
-// PARABOLIC SAR
+// SESSION FILTER
 // =====================================================
-psarStart = input.float(0.02, "PSAR Start")
-psarInc   = input.float(0.02, "PSAR Increment")
-psarMax   = input.float(0.2,  "PSAR Max")
+inSession = not na(time(timeframe.period, sessionTime, "Asia/Jakarta"))
+
+// =====================================================
+// CORE INDICATORS
+// =====================================================
+emaFast = ta.ema(close, emaFastLen)
+emaMid  = ta.ema(close, emaMidLen)
+emaSlow = ta.ema(close, emaSlowLen)
 
 psar = ta.sar(psarStart, psarInc, psarMax)
-plot(psar, style=plot.style_circles, linewidth=1, color=color.white, title="PSAR")
+
+[superTrend, direction] = ta.supertrend(stFactor, stATR)
+stBull = direction < 0
+stBear = direction > 0
 
 // =====================================================
-// SUPERTREND
+// TREND STRUCTURE
 // =====================================================
-stFactor = input.float(3.0, "SuperTrend Factor")
-stATR    = input.int(10, "SuperTrend ATR")
+emaBull = emaFast > emaMid and emaMid > emaSlow
+emaBear = emaFast < emaMid and emaMid < emaSlow
 
-[st, dir] = ta.supertrend(stFactor, stATR)
-plot(st, color = dir < 0 ? color.green : color.red, linewidth=1, title="SuperTrend")
+psarBull = close > psar
+psarBear = close < psar
 
-// =====================================================
-// MULTI-TIMEFRAME DASHBOARD
-// =====================================================
+// NORMAL MODE (Majority Align)
+bullScore = (emaBull ? 1 : 0) + (stBull ? 1 : 0) + (psarBull ? 1 : 0)
+bearScore = (emaBear ? 1 : 0) + (stBear ? 1 : 0) + (psarBear ? 1 : 0)
 
-// H4 EMA20 vs EMA50
-ema20_h4 = request.security(syminfo.tickerid, "240", ta.ema(close, 20))
-ema50_h4 = request.security(syminfo.tickerid, "240", ta.ema(close, 50))
-h4_signal = ema20_h4 > ema50_h4
-
-// H1 EMA20 vs EMA50
-ema20_h1 = request.security(syminfo.tickerid, "60", ta.ema(close, 20))
-ema50_h1 = request.security(syminfo.tickerid, "60", ta.ema(close, 50))
-h1_signal = ema20_h1 > ema50_h1
-
-// M15 EMA5 vs EMA20
-ema5_m15 = request.security(syminfo.tickerid, "15", ta.ema(close, 5))
-ema20_m15 = request.security(syminfo.tickerid, "15", ta.ema(close, 20))
-m15_signal = ema5_m15 > ema20_m15
+upTrend   = bullScore >= 2
+downTrend = bearScore >= 2
 
 // =====================================================
-// DASHBOARD TABLE
+// CLOSE CONFIRMATION TRIGGER (WITH CROSSOVER)
 // =====================================================
+longCrossover  = ta.crossover(close, emaFast)
+shortCrossunder = ta.crossunder(close, emaFast)
 
+longTrigger  = upTrend and longCrossover
+shortTrigger = downTrend and shortCrossunder
+
+// =====================================================
+// ATR RISK FILTER
+// =====================================================
+atrValue = ta.atr(atrLen)
+
+// Pivot SL
+pivotLow  = ta.lowest(low, pivotLen)
+pivotHigh = ta.highest(high, pivotLen)
+
+longSL  = pivotLow
+shortSL = pivotHigh
+
+longRisk  = close - longSL
+shortRisk = shortSL - close
+
+longValidRisk  = longRisk > 0 and longRisk <= atrValue * atrMult
+shortValidRisk = shortRisk > 0 and shortRisk <= atrValue * atrMult
+
+// =====================================================
+// RR PROJECTION & VALIDATION
+// =====================================================
+longTP  = close + (longRisk * rrRatio)
+shortTP = close - (shortRisk * rrRatio)
+
+longValid  = longTP > longSL
+shortValid = shortTP < shortSL
+
+// =====================================================
+// FINAL ENTRY CONDITION
+// =====================================================
+longSignal  = inSession and longTrigger and longValidRisk and longValid
+shortSignal = inSession and shortTrigger and shortValidRisk and shortValid
+
+// =====================================================
+// PLOT SL & TP (Only when signal active)
+// =====================================================
+plot(longSignal ? longSL : na, color=color.red, linewidth=2, style=plot.style_linebr, title="Long SL")
+plot(shortSignal ? shortSL : na, color=color.red, linewidth=2, style=plot.style_linebr, title="Short SL")
+
+plot(longSignal ? longTP : na, color=color.green, linewidth=2, style=plot.style_linebr, title="Long TP")
+plot(shortSignal ? shortTP : na, color=color.green, linewidth=2, style=plot.style_linebr, title="Short TP")
+
+// =====================================================
+// PLOTS - CORE INDICATORS
+// =====================================================
+plot(emaFast, color=color.white, linewidth=1, title="EMA Fast")
+plot(emaMid, color=color.orange, linewidth=1, title="EMA Mid")
+plot(emaSlow, color=color.blue, linewidth=1, title="EMA Slow")
+
+plot(psar, style=plot.style_circles, linewidth=1, color=color.gray, title="PSAR")
+plot(superTrend, color=stBull ? color.green : color.red, linewidth=2, title="SuperTrend")
+
+// =====================================================
+// SESSION BACKGROUND
+// =====================================================
+bgcolor(inSession ? color.new(color.blue, 90) : na, title="Session Active")
+
+// =====================================================
+// LABEL ENTRY (with SL & TP info)
+// =====================================================
+var label lastLongLabel = na
+var label lastShortLabel = na
+
+if longSignal and barstate.isconfirmed
+    if not na(lastLongLabel)
+        label.delete(lastLongLabel)
+    lastLongLabel := label.new(bar_index, low - atrValue,
+        "BUY\nSL: " + str.tostring(longSL, "#.##") + "\nTP: " + str.tostring(longTP, "#.##"),
+        style=label.style_label_up,
+        color=color.green,
+        textcolor=color.white,
+        size=size.small)
+
+if shortSignal and barstate.isconfirmed
+    if not na(lastShortLabel)
+        label.delete(lastShortLabel)
+    lastShortLabel := label.new(bar_index, high + atrValue,
+        "SELL\nSL: " + str.tostring(shortSL, "#.##") + "\nTP: " + str.tostring(shortTP, "#.##"),
+        style=label.style_label_down,
+        color=color.red,
+        textcolor=color.white,
+        size=size.small)
+
+// =====================================================
+// DASHBOARD - AUTO UPDATE
+// =====================================================
 var table dashboard = na
 
 if barstate.islast
     if na(dashboard)
-        dashboard := table.new(position.top_right, 2, 4, 
+        dashboard := table.new(position.top_right, 2, 6, 
             bgcolor=color.new(color.black, 20),
             border_color=color.gray,
-            border_width=2)
-        
-        // Header
-        table.cell(dashboard, 0, 0, "Timeframe", text_color=color.white, bgcolor=color.new(color.blue, 60), text_size=size.small, text_halign=text.align_center)
-        table.cell(dashboard, 1, 0, "Signal", text_color=color.white, bgcolor=color.new(color.blue, 60), text_size=size.small, text_halign=text.align_center)
-        
-        // H4 Row
-        table.cell(dashboard, 0, 1, "H4 (EMA20>EMA50)", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
-        table.cell(dashboard, 1, 1, h4_signal ? "✓" : "✗", 
-            text_color=h4_signal ? color.green : color.red,
-            bgcolor=color.new(color.black, 0),
-            text_size=size.large,
-            text_halign=text.align_center)
-        
-        // H1 Row
-        table.cell(dashboard, 0, 2, "H1 (EMA20>EMA50)", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
-        table.cell(dashboard, 1, 2, h1_signal ? "✓" : "✗",
-            text_color=h1_signal ? color.green : color.red,
-            bgcolor=color.new(color.black, 0),
-            text_size=size.large,
-            text_halign=text.align_center)
-        
-        // M15 Row
-        table.cell(dashboard, 0, 3, "M15 (EMA5>EMA20)", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
-        table.cell(dashboard, 1, 3, m15_signal ? "✓" : "✗",
-            text_color=m15_signal ? color.green : color.red,
-            bgcolor=color.new(color.black, 0),
-            text_size=size.large,
-            text_halign=text.align_center)
-    else
-        // Update signals
-        table.cell(dashboard, 1, 1, h4_signal ? "✓" : "✗",
-            text_color=h4_signal ? color.green : color.red,
-            text_size=size.large,
-            text_halign=text.align_center)
-        
-        table.cell(dashboard, 1, 2, h1_signal ? "✓" : "✗",
-            text_color=h1_signal ? color.green : color.red,
-            text_size=size.large,
-            text_halign=text.align_center)
-        
-        table.cell(dashboard, 1, 3, m15_signal ? "✓" : "✗",
-            text_color=m15_signal ? color.green : color.red,
-            text_size=size.large,
-            text_halign=text.align_center)
+            border_width=1)
+
+    // SESSION
+    table.cell(dashboard, 0, 0, "SESSION", text_color=color.white, text_size=size.small)
+    table.cell(dashboard, 1, 0, inSession ? "✓ ON" : "✗ OFF",
+        text_color=inSession ? color.green : color.red, text_size=size.small)
+
+    // EMA ALIGN
+    table.cell(dashboard, 0, 1, "EMA ALIGN", text_color=color.white, text_size=size.small)
+    emaStatus = emaBull ? "✓ BULL" : emaBear ? "✗ BEAR" : "⊗ MIX"
+    table.cell(dashboard, 1, 1, emaStatus, 
+        text_color=emaBull ? color.green : emaBear ? color.red : color.orange, text_size=size.small)
+
+    // SUPERTREND
+    table.cell(dashboard, 0, 2, "SUPERTREND", text_color=color.white, text_size=size.small)
+    table.cell(dashboard, 1, 2, stBull ? "✓ BULL" : "✗ BEAR",
+        text_color=stBull ? color.green : color.red, text_size=size.small)
+
+    // PSAR
+    table.cell(dashboard, 0, 3, "PSAR", text_color=color.white, text_size=size.small)
+    table.cell(dashboard, 1, 3, psarBull ? "✓ BULL" : "✗ BEAR",
+        text_color=psarBull ? color.green : color.red, text_size=size.small)
+
+    // RISK OK
+    table.cell(dashboard, 0, 4, "RISK OK?", text_color=color.white, text_size=size.small)
+    riskStatus = (longValidRisk or shortValidRisk) ? "✓ YES" : "✗ NO"
+    table.cell(dashboard, 1, 4, riskStatus,
+        text_color=(longValidRisk or shortValidRisk) ? color.green : color.red, text_size=size.small)
+
+    // SETUP
+    table.cell(dashboard, 0, 5, "SETUP", text_color=color.white, text_size=size.small)
+    setupStatus = longSignal ? "→ READY BUY" : shortSignal ? "← READY SELL" : "⊗ WAIT"
+    setupColor = longSignal ? color.green : shortSignal ? color.red : color.orange
+    table.cell(dashboard, 1, 5, setupStatus, text_color=setupColor, text_size=size.small)
