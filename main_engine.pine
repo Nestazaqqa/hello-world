@@ -5,12 +5,12 @@ indicator("MAIN ENGINE – CORE CLEAN", overlay=true)
 // EMA
 // =====================================================
 emaFast = ta.ema(close, 5)
-emaSlow = ta.ema(close, 20)
-emaMid = ta.ema(close, 50)
+emaMid = ta.ema(close, 20)
+emaSlow = ta.ema(close, 50)
 
 plot(emaFast, color=color.white, linewidth=1, title="EMA 5")
-plot(emaSlow, color=color.orange,   linewidth=1, title="EMA 20")
-plot(emaMid, color=color.blue,   linewidth=1, title="EMA 50")
+plot(emaMid, color=color.orange,   linewidth=1, title="EMA 20")
+plot(emaSlow, color=color.blue,   linewidth=1, title="EMA 50")
 
 // =====================================================
 // PARABOLIC SAR
