@@ -30,3 +30,79 @@ stATR    = input.int(10, "SuperTrend ATR")
 
 [st, dir] = ta.supertrend(stFactor, stATR)
 plot(st, color = dir < 0 ? color.green : color.red, linewidth=1, title="SuperTrend")
+
+// =====================================================
+// MULTI-TIMEFRAME DASHBOARD
+// =====================================================
+
+// H4 EMA20 vs EMA50
+ema20_h4 = request.security(syminfo.tickerid, "240", ta.ema(close, 20))
+ema50_h4 = request.security(syminfo.tickerid, "240", ta.ema(close, 50))
+h4_signal = ema20_h4 > ema50_h4
+
+// H1 EMA20 vs EMA50
+ema20_h1 = request.security(syminfo.tickerid, "60", ta.ema(close, 20))
+ema50_h1 = request.security(syminfo.tickerid, "60", ta.ema(close, 50))
+h1_signal = ema20_h1 > ema50_h1
+
+// M15 EMA5 vs EMA20
+ema5_m15 = request.security(syminfo.tickerid, "15", ta.ema(close, 5))
+ema20_m15 = request.security(syminfo.tickerid, "15", ta.ema(close, 20))
+m15_signal = ema5_m15 > ema20_m15
+
+// =====================================================
+// DASHBOARD TABLE
+// =====================================================
+
+var table dashboard = na
+
+if barstate.islast
+    if na(dashboard)
+        dashboard := table.new(position.top_right, 2, 4, 
+            bgcolor=color.new(color.black, 20),
+            border_color=color.gray,
+            border_width=2)
+        
+        // Header
+        table.cell(dashboard, 0, 0, "Timeframe", text_color=color.white, bgcolor=color.new(color.blue, 60), text_size=size.small, text_halign=text.align_center)
+        table.cell(dashboard, 1, 0, "Signal", text_color=color.white, bgcolor=color.new(color.blue, 60), text_size=size.small, text_halign=text.align_center)
+        
+        // H4 Row
+        table.cell(dashboard, 0, 1, "H4 (EMA20>EMA50)", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+        table.cell(dashboard, 1, 1, h4_signal ? "✓" : "✗", 
+            text_color=h4_signal ? color.green : color.red,
+            bgcolor=color.new(color.black, 0),
+            text_size=size.large,
+            text_halign=text.align_center)
+        
+        // H1 Row
+        table.cell(dashboard, 0, 2, "H1 (EMA20>EMA50)", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+        table.cell(dashboard, 1, 2, h1_signal ? "✓" : "✗",
+            text_color=h1_signal ? color.green : color.red,
+            bgcolor=color.new(color.black, 0),
+            text_size=size.large,
+            text_halign=text.align_center)
+        
+        // M15 Row
+        table.cell(dashboard, 0, 3, "M15 (EMA5>EMA20)", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+        table.cell(dashboard, 1, 3, m15_signal ? "✓" : "✗",
+            text_color=m15_signal ? color.green : color.red,
+            bgcolor=color.new(color.black, 0),
+            text_size=size.large,
+            text_halign=text.align_center)
+    else
+        // Update signals
+        table.cell(dashboard, 1, 1, h4_signal ? "✓" : "✗",
+            text_color=h4_signal ? color.green : color.red,
+            text_size=size.large,
+            text_halign=text.align_center)
+        
+        table.cell(dashboard, 1, 2, h1_signal ? "✓" : "✗",
+            text_color=h1_signal ? color.green : color.red,
+            text_size=size.large,
+            text_halign=text.align_center)
+        
+        table.cell(dashboard, 1, 3, m15_signal ? "✓" : "✗",
+            text_color=m15_signal ? color.green : color.red,
+            text_size=size.large,
+            text_halign=text.align_center)
